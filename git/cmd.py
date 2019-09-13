@@ -9,18 +9,19 @@ import io
 import logging
 import os
 import signal
+from path import Path
 from subprocess import (
     call,
     Popen,
-    PIPE
+    PIPE,
+    STDOUT
 )
 import subprocess
 import sys
 import threading
 from collections import OrderedDict
 from textwrap import dedent
-
-from git.compat import (
+from .compat import (
     string_types,
     defenc,
     force_bytes,
@@ -31,16 +32,17 @@ from git.compat import (
     is_posix,
     is_win,
 )
-from git.exc import CommandError
-from git.util import is_cygwin_git, cygpath, expand_path
-
 from .exc import (
     GitCommandError,
+    InvalidGitRepositoryError,
     GitCommandNotFound
 )
 from .util import (
     LazyMixin,
     stream_copy,
+    is_cygwin_git,
+    cygpath,
+    expand_path
 )
 
 try:
@@ -82,17 +84,20 @@ def handle_process_output(process, stdout_handler, stderr_handler,
         Set it to False if `universal_newline == True` (then streams are in text-mode)
         or if decoding must happen later (i.e. for Diffs).
     """
-    # Use 2 "pump" threads and wait for both to finish.
+    pumped_lines = {'stdout': [], 'stderr': []}
+    # Use 2 "pupm" threads and wait for both to finish.
+    # BF: Collect all pumped output to possibly provide it within thrown exception
     def pump_stream(cmdline, name, stream, is_decode, handler):
         try:
             for line in stream:
+                if is_decode:
+                    line = line.decode(defenc)
+                pumped_lines[name].append(line)
                 if handler:
-                    if is_decode:
-                        line = line.decode(defenc)
                     handler(line)
         except Exception as ex:
             log.error("Pumping %r of cmd(%s) failed due to: %r", name, cmdline, ex)
-            raise CommandError(['<%s-pump>' % name] + cmdline, ex)
+            raise CommandError(['<%s-pump>' % name] + cmdline, ex, **pumped_lines)
         finally:
             stream.close()
 
@@ -108,20 +113,29 @@ def handle_process_output(process, stdout_handler, stderr_handler,
 
     threads = []
 
-    for name, stream, handler in pumps:
-        t = threading.Thread(target=pump_stream,
-                             args=(cmdline, name, stream, decode_streams, handler))
-        t.setDaemon(True)
-        t.start()
-        threads.append(t)
+    try:
+        for name, stream, handler in pumps:
+            t = threading.Thread(target=pump_stream,
+                                 args=(cmdline, name, stream, decode_streams, handler))
+            t.setDaemon(True)
+            t.start()
+            threads.append(t)
 
-    ## FIXME: Why Join??  Will block if `stdin` needs feeding...
-    #
-    for t in threads:
-        t.join()
+        ## FIXME: Why Join??  Will block if `stdin` needs feeding...
+        #
+        for t in threads:
+            t.join()
 
-    if finalizer:
-        return finalizer(process)
+        if finalizer:
+            return finalizer(process)
+    except Exception as e:
+        for outname, out in pumped_lines.items():
+            if out and hasattr(e, outname):
+                eout = getattr(e, outname)
+                if not eout:
+                    setattr(e, outname, safe_decode(os.linesep.join(out)))
+        raise
+
 
 
 def dashify(string):
@@ -218,7 +232,7 @@ class Git(LazyMixin):
         # - a GitCommandNotFound error is spawned by ourselves
         # - a PermissionError is spawned if the git executable provided
         #   cannot be executed for whatever reason
-        
+
         has_git = False
         try:
             cls().version()
@@ -311,6 +325,11 @@ class Git(LazyMixin):
                 raise GitCommandNotFound("git", err)
 
         return has_git
+
+    def is_git_dir(self):
+        if call(['git', 'rev-parse', '--is-inside-work-tree'], stderr=STDOUT, stdout=open(os.devnull, 'w'), cwd=self._working_dir) != 0:
+            return False
+        return True
 
     @classmethod
     def is_cygwin(cls):
@@ -525,6 +544,8 @@ class Git(LazyMixin):
            It is meant to be the working tree directory if available, or the
            .git directory in case of bare repositories."""
         super(Git, self).__init__()
+        if working_dir == None:
+            working_dir = '.'
         self._working_dir = expand_path(working_dir)
         self._git_options = ()
         self._persistent_git_options = []
@@ -638,7 +659,7 @@ class Git(LazyMixin):
 
         :param env:
             A dictionary of environment variables to be passed to `subprocess.Popen`.
-            
+
         :param max_chunk_size:
             Maximum number of bytes in one chunk of data passed to the output_stream in
             one invocation of write() method. If the given number is not positive then

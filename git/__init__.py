@@ -12,13 +12,13 @@ import sys
 import os.path as osp
 
 
-__version__ = 'git'
+__version__ = 'vitko'
 
 
 #{ Initialization
 def _init_externals():
     """Initialize external projects by putting them into the path"""
-    if __version__ == 'git':
+    if __version__ == '2.1.11':
         sys.path.insert(0, osp.join(osp.dirname(__file__), 'ext', 'gitdb'))
 
     try:
