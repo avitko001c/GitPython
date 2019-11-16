@@ -401,11 +401,7 @@ class RemoteProgress(object):
             # Trim whitespace
             message_string = ' '.join(message_string.split())
 
-            self.update(0,
-                        1,
-                        1,
-                        message_string)
-
+            self.update(0, 1, 1, message_string) 
         sub_lines = line.split('\r')
         failed_lines = []
         for sline in sub_lines:

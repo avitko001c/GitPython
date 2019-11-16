@@ -11,6 +11,11 @@ import sys
 
 import os.path as osp
 
+try:
+   from shutil import which
+except:
+   from subprocess import getoutput
+   which = lambda x: getoutput('which {cmd}'.format(cmd=x))
 
 __version__ = 'vitko'
 
@@ -79,8 +84,9 @@ def refresh(path=None):
 #} END initialize git executable path
 
 #################
+path = which('git') or None
 try:
-    refresh()
+    refresh(path)
 except Exception as exc:
     raise ImportError('Failed to initialize: {0}'.format(exc))
 #################
