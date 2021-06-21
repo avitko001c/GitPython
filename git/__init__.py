@@ -5,34 +5,32 @@
 # the BSD License: http://www.opensource.org/licenses/bsd-license.php
 # flake8: noqa
 #@PydevCodeAnalysisIgnore
+from git.exc import *                       # @NoMove @IgnorePep8
 import inspect
 import os
 import sys
-
 import os.path as osp
 
-try:
-   from shutil import which
-except:
-   from subprocess import getoutput
-   which = lambda x: getoutput('which {cmd}'.format(cmd=x))
+from typing import Optional
+from git.types import PathLike
 
-__version__ = 'vitko'
+__version__ = 'git'
 
 
 #{ Initialization
-def _init_externals():
+def _init_externals() -> None:
     """Initialize external projects by putting them into the path"""
-    if __version__ == '2.1.11':
-        sys.path.insert(0, osp.join(osp.dirname(__file__), 'ext', 'gitdb'))
+    if __version__ == 'git' and 'PYOXIDIZER' not in os.environ:
+        sys.path.insert(1, osp.join(osp.dirname(__file__), 'ext', 'gitdb'))
 
     try:
         import gitdb
-    except ImportError:
-        raise ImportError("'gitdb' could not be found in your PYTHONPATH")
+    except ImportError as e:
+        raise ImportError("'gitdb' could not be found in your PYTHONPATH") from e
     # END verify import
 
 #} END initialization
+
 
 #################
 _init_externals()
@@ -40,7 +38,6 @@ _init_externals()
 
 #{ Imports
 
-from git.exc import *                       # @NoMove @IgnorePep8
 try:
     from git.config import GitConfigParser  # @NoMove @IgnorePep8
     from git.objects import *               # @NoMove @IgnorePep8
@@ -59,7 +56,7 @@ try:
         rmtree,
     )
 except GitError as exc:
-    raise ImportError('%s: %s' % (exc.__class__.__name__, exc))
+    raise ImportError('%s: %s' % (exc.__class__.__name__, exc)) from exc
 
 #} END imports
 
@@ -70,7 +67,8 @@ __all__ = [name for name, obj in locals().items()
 #{ Initialize git executable path
 GIT_OK = None
 
-def refresh(path=None):
+
+def refresh(path: Optional[PathLike] = None) -> None:
     """Convenience method for setting the git executable path."""
     global GIT_OK
     GIT_OK = False
@@ -83,10 +81,10 @@ def refresh(path=None):
     GIT_OK = True
 #} END initialize git executable path
 
+
 #################
-path = which('git') or None
 try:
-    refresh(path)
+    refresh()
 except Exception as exc:
-    raise ImportError('Failed to initialize: {0}'.format(exc))
+    raise ImportError('Failed to initialize: {0}'.format(exc)) from exc
 #################

@@ -6,7 +6,11 @@
 #
 
 FROM ubuntu:xenial
-MAINTAINER James E. King III <jking@apache.org>
+
+# Metadata
+LABEL maintainer="jking@apache.org"
+LABEL description="CI environment for testing GitPython"
+
 ENV CONTAINER_USER=user
 ENV DEBIAN_FRONTEND noninteractive
 

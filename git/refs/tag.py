@@ -1,5 +1,4 @@
 from .reference import Reference
-from git.exc import GitCommandError
 
 __all__ = ["TagReference", "Tag"]
 
@@ -19,12 +18,13 @@ class TagReference(Reference):
         print(tagref.tag.message)"""
 
     __slots__ = ()
-    _common_path_default = "refs/tags"
+    _common_default = "tags"
+    _common_path_default = Reference._common_path_default + "/" + _common_default
 
     @property
     def commit(self):
         """:return: Commit object the tag ref points to
-
+        
         :raise ValueError: if the tag points to a tree or blob"""
         obj = self.object
         while obj.type != 'commit':
@@ -51,12 +51,10 @@ class TagReference(Reference):
     object = property(Reference._get_object)
 
     @classmethod
-    def create(cls, repo, tag, push=False, ref='HEAD', message=None, force=False, **kwargs):
+    def create(cls, repo, path, ref='HEAD', message=None, force=False, **kwargs):
         """Create a new tag reference.
-        :param push:
-            If True, push the tag after creation with a force.
-            
-        :param tag:
+
+        :param path:
             The name of the tag, i.e. 1.0 or releases/1.0.
             The prefix refs/tags is implied
 
@@ -77,37 +75,19 @@ class TagReference(Reference):
             Additional keyword arguments to be passed to git-tag
 
         :return: A new TagReference"""
-        args = (tag, ref)
+        args = (path, ref)
         if message:
             kwargs['m'] = message
         if force:
             kwargs['f'] = True
-        repo.git.tag(*args, **kwargs)
-        if push:
-            if message:
-                del kwargs['m']
-            try:
-                repo.git.push('origin', tag, **kwargs)
-            except GitCommandError as err:
-                if err.status == 1:
-                    pass
-                return False
 
-        return TagReference(repo, "%s/%s" % (cls._common_path_default, tag))
+        repo.git.tag(*args, **kwargs)
+        return TagReference(repo, "%s/%s" % (cls._common_path_default, path))
 
     @classmethod
-    def delete(cls, repo, push=False, *tags, **kwargs):
+    def delete(cls, repo, *tags):
         """Delete the given existing tag or tags"""
         repo.git.tag("-d", *tags)
-        if push:
-            kwargs['d'] = True
-            for tag in tags:
-                try:
-                    repo.git.push('origin', tag, **kwargs)
-                except GitCommandError as err:
-                    if err.status == 1:
-                       pass
-                    return False
 
 
 # provide an alias

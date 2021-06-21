@@ -11,17 +11,24 @@ from . import util
 from .base import IndexObject
 from .blob import Blob
 from .submodule.base import Submodule
-from git.compat import string_types
 
 from .fun import (
     tree_entries_from_data,
     tree_to_stream
 )
 
-from git.compat import PY3
 
-if PY3:
-    cmp = lambda a, b: (a > b) - (a < b)
+# typing -------------------------------------------------
+
+from typing import Iterable, Iterator, Tuple, Union, cast, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from io import BytesIO
+
+#--------------------------------------------------------
+
+
+cmp = lambda a, b: (a > b) - (a < b)
 
 __all__ = ("TreeModifier", "Tree")
 
@@ -186,8 +193,10 @@ class Tree(IndexObject, diff.Diffable, util.Traversable, util.Serializable):
         super(Tree, self).__init__(repo, binsha, mode, path)
 
     @classmethod
-    def _get_intermediate_items(cls, index_object):
+    def _get_intermediate_items(cls, index_object: 'Tree',    # type: ignore
+                                ) -> Tuple['Tree', ...]:
         if index_object.type == "tree":
+            index_object = cast('Tree', index_object)
             return tuple(index_object._iter_convert_to_object(index_object._cache))
         return ()
 
@@ -200,15 +209,16 @@ class Tree(IndexObject, diff.Diffable, util.Traversable, util.Serializable):
             super(Tree, self)._set_cache_(attr)
         # END handle attribute
 
-    def _iter_convert_to_object(self, iterable):
+    def _iter_convert_to_object(self, iterable: Iterable[Tuple[bytes, int, str]]
+                                ) -> Iterator[Union[Blob, 'Tree', Submodule]]:
         """Iterable yields tuples of (binsha, mode, name), which will be converted
         to the respective object representation"""
         for binsha, mode, name in iterable:
             path = join_path(self.path, name)
             try:
                 yield self._map_id_to_type[mode >> 12](self.repo, binsha, mode, path)
-            except KeyError:
-                raise TypeError("Unknown mode %o found in tree data for path '%s'" % (mode, path))
+            except KeyError as e:
+                raise TypeError("Unknown mode %o found in tree data for path '%s'" % (mode, path)) from e
         # END for each item
 
     def join(self, file):
@@ -293,7 +303,7 @@ class Tree(IndexObject, diff.Diffable, util.Traversable, util.Serializable):
             info = self._cache[item]
             return self._map_id_to_type[info[1] >> 12](self.repo, info[0], info[1], join_path(self.path, info[2]))
 
-        if isinstance(item, string_types):
+        if isinstance(item, str):
             # compatibility
             return self.join(item)
         # END index is basestring
@@ -321,7 +331,7 @@ class Tree(IndexObject, diff.Diffable, util.Traversable, util.Serializable):
     def __reversed__(self):
         return reversed(self._iter_convert_to_object(self._cache))
 
-    def _serialize(self, stream):
+    def _serialize(self, stream: 'BytesIO') -> 'Tree':
         """Serialize this tree into the stream. Please note that we will assume
         our tree data to be in a sorted state. If this is not the case, serialization
         will not generate a correct tree representation as these are assumed to be sorted
@@ -329,7 +339,7 @@ class Tree(IndexObject, diff.Diffable, util.Traversable, util.Serializable):
         tree_to_stream(self._cache, stream.write)
         return self
 
-    def _deserialize(self, stream):
+    def _deserialize(self, stream: 'BytesIO') -> 'Tree':
         self._cache = tree_entries_from_data(stream.read())
         return self
 

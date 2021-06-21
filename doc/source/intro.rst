@@ -13,18 +13,14 @@ The object database implementation is optimized for handling large quantities of
 Requirements
 ============
 
-* `Python`_ 2.7 or newer
+* `Python`_ >= 3.6
 * `Git`_ 1.7.0 or newer
     It should also work with older versions, but it may be that some operations
     involving remotes will not work as expected.
 * `GitDB`_ - a pure python git database implementation
-* `Python Nose`_ - used for running the tests
-* `Mock by Michael Foord`_ used for tests. Requires version 0.5
 
 .. _Python: https://www.python.org
 .. _Git: https://git-scm.com/
-.. _Python Nose: https://nose.readthedocs.io/en/latest/
-.. _Mock by Michael Foord: http://www.voidspace.org.uk/python/mock.html
 .. _GitDB: https://pypi.python.org/pypi/gitdb
 
 Installing GitPython
@@ -36,7 +32,7 @@ installed, just run the following from the command-line:
 
 .. sourcecode:: none
 
-    # pip install gitpython
+    # pip install GitPython
 
 This command will download the latest version of GitPython from the
 `Python Package Index <http://pypi.python.org/pypi/GitPython>`_ and install it
@@ -104,9 +100,9 @@ Initialize all submodules to obtain the required dependencies with::
     $ cd git-python
     $ git submodule update --init --recursive
 
-Finally verify the installation by running the `nose powered <https://github.com/nose-devs/nose>`_ unit tests::
+Finally verify the installation by running unit tests::
 
-    $ nosetests
+    $ python -m unittest
 
 Questions and Answers
 =====================

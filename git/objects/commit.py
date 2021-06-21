@@ -24,7 +24,6 @@ from .util import (
     parse_actor_and_date,
     from_timestamp,
 )
-from git.compat import text_type
 
 from time import (
     time,
@@ -36,6 +35,11 @@ from time import (
 import os
 from io import BytesIO
 import logging
+
+from typing import List, Tuple, Union, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from git.repo import Repo
 
 log = logging.getLogger('git.objects.commit')
 log.addHandler(logging.NullHandler())
@@ -71,7 +75,8 @@ class Commit(base.Object, Iterable, Diffable, Traversable, Serializable):
 
     def __init__(self, repo, binsha, tree=None, author=None, authored_date=None, author_tz_offset=None,
                  committer=None, committed_date=None, committer_tz_offset=None,
-                 message=None, parents=None, encoding=None, gpgsig=None):
+                 message=None, parents: Union[Tuple['Commit', ...], List['Commit'], None] = None,
+                 encoding=None, gpgsig=None):
         """Instantiate a new Commit. All keyword arguments taking None as default will
         be implicitly set on first query.
 
@@ -134,13 +139,48 @@ class Commit(base.Object, Iterable, Diffable, Traversable, Serializable):
             self.gpgsig = gpgsig
 
     @classmethod
-    def _get_intermediate_items(cls, commit):
-        return commit.parents
+    def _get_intermediate_items(cls, commit: 'Commit') -> Tuple['Commit', ...]:  # type: ignore  ## cos overriding super
+        return tuple(commit.parents)
+
+    @classmethod
+    def _calculate_sha_(cls, repo: 'Repo', commit: 'Commit') -> bytes:
+        '''Calculate the sha of a commit.
+
+        :param repo: Repo object the commit should be part of
+        :param commit: Commit object for which to generate the sha
+        '''
+
+        stream = BytesIO()
+        commit._serialize(stream)
+        streamlen = stream.tell()
+        stream.seek(0)
+
+        istream = repo.odb.store(IStream(cls.type, streamlen, stream))
+        return istream.binsha
+
+    def replace(self, **kwargs):
+        '''Create new commit object from existing commit object.
+
+        Any values provided as keyword arguments will replace the
+        corresponding attribute in the new object.
+        '''
+
+        attrs = {k: getattr(self, k) for k in self.__slots__}
+
+        for attrname in kwargs:
+            if attrname not in self.__slots__:
+                raise ValueError('invalid attribute name')
+
+        attrs.update(kwargs)
+        new_commit = self.__class__(self.repo, self.NULL_BIN_SHA, **attrs)
+        new_commit.binsha = self._calculate_sha_(self.repo, new_commit)
+
+        return new_commit
 
     def _set_cache_(self, attr):
         if attr in Commit.__slots__:
             # read the data in a chunk, its faster - then provide a file wrapper
-            binsha, typename, self.size, stream = self.repo.odb.stream(self.binsha)  # @UnusedVariable
+            _binsha, _typename, self.size, stream = self.repo.odb.stream(self.binsha)
             self._deserialize(BytesIO(stream.read()))
         else:
             super(Commit, self)._set_cache_(attr)
@@ -174,8 +214,7 @@ class Commit(base.Object, Iterable, Diffable, Traversable, Serializable):
         # as the empty paths version will ignore merge commits for some reason.
         if paths:
             return len(self.repo.git.rev_list(self.hexsha, '--', paths, **kwargs).splitlines())
-        else:
-            return len(self.repo.git.rev_list(self.hexsha, **kwargs).splitlines())
+        return len(self.repo.git.rev_list(self.hexsha, **kwargs).splitlines())
 
     @property
     def name_rev(self):
@@ -271,7 +310,7 @@ class Commit(base.Object, Iterable, Diffable, Traversable, Serializable):
             # END handle extra info
 
             assert len(hexsha) == 40, "Invalid line: %s" % hexsha
-            yield Commit(repo, hex_to_bin(hexsha))
+            yield cls(repo, hex_to_bin(hexsha))
         # END for each line in stream
         # TODO: Review this - it seems process handling got a bit out of control
         # due to many developers trying to fix the open file handles issue
@@ -377,13 +416,7 @@ class Commit(base.Object, Iterable, Diffable, Traversable, Serializable):
                          committer, committer_time, committer_offset,
                          message, parent_commits, conf_encoding)
 
-        stream = BytesIO()
-        new_commit._serialize(stream)
-        streamlen = stream.tell()
-        stream.seek(0)
-
-        istream = repo.odb.store(IStream(cls.type, streamlen, stream))
-        new_commit.binsha = istream.binsha
+        new_commit.binsha = cls._calculate_sha_(repo, new_commit)
 
         if head:
             # need late import here, importing git at the very beginning throws
@@ -403,7 +436,7 @@ class Commit(base.Object, Iterable, Diffable, Traversable, Serializable):
 
     #{ Serializable Implementation
 
-    def _serialize(self, stream):
+    def _serialize(self, stream: BytesIO) -> 'Commit':
         write = stream.write
         write(("tree %s\n" % self.tree).encode('ascii'))
         for p in self.parents:
@@ -437,14 +470,14 @@ class Commit(base.Object, Iterable, Diffable, Traversable, Serializable):
         write(b"\n")
 
         # write plain bytes, be sure its encoded according to our encoding
-        if isinstance(self.message, text_type):
+        if isinstance(self.message, str):
             write(self.message.encode(self.encoding))
         else:
             write(self.message)
         # END handle encoding
         return self
 
-    def _deserialize(self, stream):
+    def _deserialize(self, stream: BytesIO) -> 'Commit':
         """:param from_rev_list: if true, the stream format is coming from the rev-list command
         Otherwise it is assumed to be a plain data stream from our object"""
         readline = stream.readline
@@ -484,7 +517,8 @@ class Commit(base.Object, Iterable, Diffable, Traversable, Serializable):
         buf = enc.strip()
         while buf:
             if buf[0:10] == b"encoding ":
-                self.encoding = buf[buf.find(' ') + 1:].decode('ascii')
+                self.encoding = buf[buf.find(b' ') + 1:].decode(
+                    self.encoding, 'ignore')
             elif buf[0:7] == b"gpgsig ":
                 sig = buf[buf.find(b' ') + 1:] + b"\n"
                 is_next_header = False
@@ -498,7 +532,7 @@ class Commit(base.Object, Iterable, Diffable, Traversable, Serializable):
                         break
                     sig += sigbuf[1:]
                 # end read all signature
-                self.gpgsig = sig.rstrip(b"\n").decode('ascii')
+                self.gpgsig = sig.rstrip(b"\n").decode(self.encoding, 'ignore')
                 if is_next_header:
                     continue
             buf = readline().strip()
