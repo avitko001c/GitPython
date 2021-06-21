@@ -15,16 +15,16 @@ release: clean
 	make force_release
 
 force_release: clean
-	git push --tags origin master
+	git push --tags origin main
 	python3 setup.py sdist bdist_wheel
-	twine upload -s -i byronimo@gmail.com dist/*
+	twine upload -s -i 27C50E7F590947D7273A741E85194C08421980C9 dist/*
 
 docker-build:
 	docker build --quiet -t gitpython:xenial -f Dockerfile .
 
 test: docker-build
 	# NOTE!!!
-	# NOTE!!! If you are not running from master or have local changes then tests will fail
+	# NOTE!!! If you are not running from main or have local changes then tests will fail
 	# NOTE!!!
 	docker run --rm -v ${CURDIR}:/src -w /src -t gitpython:xenial tox
 
