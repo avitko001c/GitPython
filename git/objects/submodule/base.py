@@ -297,9 +297,8 @@ class Submodule(IndexObject, Iterable, Traversable):
         """
         git_file = osp.join(working_tree_dir, '.git')
         rela_path = osp.relpath(module_abspath, start=working_tree_dir)
-        if is_win:
-            if osp.isfile(git_file):
-                os.remove(git_file)
+        if is_win and osp.isfile(git_file):
+            os.remove(git_file)
         with open(git_file, 'wb') as fp:
             fp.write(("gitdir: %s" % rela_path).encode(defenc))
 
@@ -380,11 +379,13 @@ class Submodule(IndexObject, Iterable, Traversable):
         br = git.Head(repo, git.Head.to_full_path(str(branch) or cls.k_head_default))
         has_module = sm.module_exists()
         branch_is_default = branch is None
-        if has_module and url is not None:
-            if url not in [r.url for r in sm.module().remotes]:
-                raise ValueError(
-                    "Specified URL '%s' does not match any remote url of the repository at '%s'" % (url, sm.abspath))
-            # END check url
+        if (
+            has_module
+            and url is not None
+            and url not in [r.url for r in sm.module().remotes]
+        ):
+            raise ValueError(
+                "Specified URL '%s' does not match any remote url of the repository at '%s'" % (url, sm.abspath))
         # END verify urls match
 
         mrepo = None
@@ -488,10 +489,6 @@ class Submodule(IndexObject, Iterable, Traversable):
         prefix = ''
         if dry_run:
             prefix = "DRY-RUN: "
-        # END handle prefix
-
-        # to keep things plausible in dry-run mode
-        if dry_run:
             mrepo = None
         # END init mrepo
 
@@ -653,14 +650,11 @@ class Submodule(IndexObject, Iterable, Traversable):
 
         # HANDLE RECURSION
         ##################
-        if recursive:
-            # in dry_run mode, the module might not exist
-            if mrepo is not None:
-                for submodule in self.iter_items(self.module()):
-                    submodule.update(recursive, init, to_latest_revision, progress=progress, dry_run=dry_run,
-                                     force=force, keep_going=keep_going)
-                # END handle recursive update
-            # END handle dry run
+        if recursive and mrepo is not None:
+            for submodule in self.iter_items(self.module()):
+                submodule.update(recursive, init, to_latest_revision, progress=progress, dry_run=dry_run,
+                                 force=force, keep_going=keep_going)
+            # END handle recursive update
         # END for each submodule
 
         return self
@@ -709,22 +703,16 @@ class Submodule(IndexObject, Iterable, Traversable):
         # END handle index key already there
 
         # remove existing destination
-        if module:
-            if osp.exists(module_checkout_abspath):
-                if len(os.listdir(module_checkout_abspath)):
-                    raise ValueError("Destination module directory was not empty")
-                # END handle non-emptiness
+        if module and osp.exists(module_checkout_abspath):
+            if len(os.listdir(module_checkout_abspath)):
+                raise ValueError("Destination module directory was not empty")
+            # END handle non-emptiness
 
-                if osp.islink(module_checkout_abspath):
-                    os.remove(module_checkout_abspath)
-                else:
-                    os.rmdir(module_checkout_abspath)
-                # END handle link
+            if osp.islink(module_checkout_abspath):
+                os.remove(module_checkout_abspath)
             else:
-                # recreate parent directories
-                # NOTE: renames() does that now
-                pass
-            # END handle existence
+                os.rmdir(module_checkout_abspath)
+            # END handle link
         # END handle module
 
         # move the module into place if possible
@@ -1095,12 +1083,11 @@ class Submodule(IndexObject, Iterable, Traversable):
         self._clear_cache()
 
         try:
-            try:
-                self.path
-                return True
-            except Exception:
-                return False
-            # END handle exceptions
+            self.path
+            return True
+                # END handle exceptions
+        except Exception:
+            return False
         finally:
             for attr in self._cache_attrs:
                 if attr in loc:

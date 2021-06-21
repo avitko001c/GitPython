@@ -63,21 +63,21 @@ def merge_sort(a, cmp):
     while i < len(lefthalf) and j < len(righthalf):
         if cmp(lefthalf[i], righthalf[j]) <= 0:
             a[k] = lefthalf[i]
-            i = i + 1
+            i += 1
         else:
             a[k] = righthalf[j]
-            j = j + 1
-        k = k + 1
+            j += 1
+        k += 1
 
     while i < len(lefthalf):
         a[k] = lefthalf[i]
-        i = i + 1
-        k = k + 1
+        i += 1
+        k += 1
 
     while j < len(righthalf):
         a[k] = righthalf[j]
-        j = j + 1
-        k = k + 1
+        j += 1
+        k += 1
 
 
 class TreeModifier(object):
@@ -132,15 +132,13 @@ class TreeModifier(object):
         item = (sha, mode, name)
         if index == -1:
             self._cache.append(item)
+        elif force:
+            self._cache[index] = item
         else:
-            if force:
-                self._cache[index] = item
-            else:
-                ex_item = self._cache[index]
-                if ex_item[0] != sha or ex_item[1] != mode:
-                    raise ValueError("Item %r existed with different properties" % name)
-                # END handle mismatch
-            # END handle force
+            ex_item = self._cache[index]
+            if ex_item[0] != sha or ex_item[1] != mode:
+                raise ValueError("Item %r existed with different properties" % name)
+            # END handle mismatch
         # END handle name exists
         return self
 
@@ -235,12 +233,11 @@ class Tree(IndexObject, diff.Diffable, util.Traversable, util.Serializable):
                 item = tree[token]
                 if item.type == 'tree':
                     tree = item
+                elif i != len(tokens) - 1:
+                    raise KeyError(msg % file)
                 else:
-                    # safety assertion - blobs are at the end of the path
-                    if i != len(tokens) - 1:
-                        raise KeyError(msg % file)
                     return item
-                # END handle item type
+                        # END handle item type
             # END for each token of split path
             if item == self:
                 raise KeyError(msg % file)
@@ -322,11 +319,7 @@ class Tree(IndexObject, diff.Diffable, util.Traversable, util.Serializable):
 
         # treat item as repo-relative path
         path = self.path
-        for info in self._cache:
-            if item == join_path(path, info[2]):
-                return True
-        # END for each item
-        return False
+        return any(item == join_path(path, info[2]) for info in self._cache)
 
     def __reversed__(self):
         return reversed(self._iter_convert_to_object(self._cache))

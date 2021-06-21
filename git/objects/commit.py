@@ -115,7 +115,6 @@ class Commit(base.Object, Iterable, Diffable, Traversable, Serializable):
         super(Commit, self).__init__(repo, binsha)
         if tree is not None:
             assert isinstance(tree, Tree), "Tree needs to be a Tree instance, was %s" % type(tree)
-        if tree is not None:
             self.tree = tree
         if author is not None:
             self.author = author

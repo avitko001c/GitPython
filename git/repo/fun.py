@@ -126,12 +126,8 @@ def name_to_object(repo: 'Repo', name: str, return_ref: bool = False
 
     # is it a hexsha ? Try the most common ones, which is 7 to 40
     if repo.re_hexsha_shortened.match(name):
-        if len(name) != 40:
-            # find long sha for short sha
-            hexsha = short_to_long(repo.odb, name)
-        else:
-            hexsha = name
-        # END handle short shas
+        hexsha = short_to_long(repo.odb, name) if len(name) != 40 else name
+            # END handle short shas
     # END find sha if it matches
 
     # if we couldn't find an object for what seemed to be a short hexsha
@@ -218,17 +214,15 @@ def rev_parse(repo: 'Repo', rev: str) -> Union['Commit', 'Tag', 'Tree', 'Blob']:
             # token is a rev name
             if start == 0:
                 ref = repo.head.ref
+            elif token == '@':
+                ref = name_to_object(repo, rev[:start], return_ref=True)
             else:
-                if token == '@':
-                    ref = name_to_object(repo, rev[:start], return_ref=True)
-                else:
-                    obj = name_to_object(repo, rev[:start])
-                # END handle token
+                obj = name_to_object(repo, rev[:start])
             # END handle refname
 
             if ref is not None:
                 obj = ref.commit
-            # END handle ref
+                    # END handle ref
         # END initialize obj on first token
 
         start += 1
@@ -252,10 +246,7 @@ def rev_parse(repo: 'Repo', rev: str) -> Union['Commit', 'Tag', 'Tree', 'Blob']:
             elif output_type in ('', 'blob'):
                 if obj and obj.type == 'tag':
                     obj = deref_tag(obj)
-                else:
-                    # cannot do anything for non-tags
-                    pass
-                # END handle tag
+                            # END handle tag
             elif token == '@':
                 # try single int
                 assert ref is not None, "Requre Reference to access reflog"
@@ -298,20 +289,19 @@ def rev_parse(repo: 'Repo', rev: str) -> Union['Commit', 'Tag', 'Tree', 'Blob']:
         if token != ":":
             found_digit = False
             while start < lr:
-                if rev[start] in digits:
-                    num = num * 10 + int(rev[start])
-                    start += 1
-                    found_digit = True
-                else:
+                if rev[start] not in digits:
                     break
-                # END handle number
+                num = num * 10 + int(rev[start])
+                start += 1
+                found_digit = True
+                            # END handle number
             # END number parse loop
 
             # no explicit number given, 1 is the default
             # It could be 0 though
             if not found_digit:
                 num = 1
-            # END set default num
+                    # END set default num
         # END number parsing only if non-blob mode
 
         parsed_to = start
@@ -340,7 +330,7 @@ def rev_parse(repo: 'Repo', rev: str) -> Union['Commit', 'Tag', 'Tree', 'Blob']:
             raise BadName(
                 "Invalid revision spec '%s' - not enough "
                 "parent commits to reach '%s%i'" % (rev, token, num)) from e
-        # END exception handling
+            # END exception handling
     # END parse loop
 
     # still no obj ? Its probably a simple name

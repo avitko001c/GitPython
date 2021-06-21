@@ -143,8 +143,7 @@ def from_timestamp(timestamp, tz_offset: float) -> datetime:
     """Converts a timestamp + tz_offset into an aware datetime instance."""
     utc_dt = datetime.fromtimestamp(timestamp, utc)
     try:
-        local_dt = utc_dt.astimezone(tzoffset(tz_offset))
-        return local_dt
+        return utc_dt.astimezone(tzoffset(tz_offset))
     except ValueError:
         return utc_dt
 

@@ -52,11 +52,7 @@ class BlobFilter(object):
 
     def __call__(self, stage_blob: Blob) -> bool:
         path = stage_blob[1].path
-        for p in self.paths:
-            if path.startswith(p):
-                return True
-        # END for each path in filter paths
-        return False
+        return any(path.startswith(p) for p in self.paths)
 
 
 class BaseIndexEntry(tuple):

@@ -82,10 +82,6 @@ class TagObject(base.Object):
             # line 4 empty - it could mark the beginning of the next header
             # in case there really is no message, it would not exist. Otherwise
             # a newline separates header from message
-            if len(lines) > 5:
-                self.message = "\n".join(lines[5:])
-            else:
-                self.message = ''
-        # END check our attributes
+            self.message = "\n".join(lines[5:]) if len(lines) > 5 else ''
         else:
             super(TagObject, self)._set_cache_(attr)

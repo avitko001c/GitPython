@@ -223,10 +223,7 @@ class Head(Reference):
 
     #{ Configuration
     def _config_parser(self, read_only):
-        if read_only:
-            parser = self.repo.config_reader()
-        else:
-            parser = self.repo.config_writer()
+        parser = self.repo.config_reader() if read_only else self.repo.config_writer()
         # END handle parser instance
 
         return SectionConstraint(parser, 'branch "%s"' % self.name)

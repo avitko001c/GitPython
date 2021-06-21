@@ -15,7 +15,7 @@ else:
 if sys.version_info[:2] < (3, 9):
     # Python >= 3.6, < 3.9
     PathLike = Union[str, os.PathLike]
-elif sys.version_info[:2] >= (3, 9):
+else:
     # os.PathLike only becomes subscriptable from Python 3.9 onwards
     PathLike = Union[str, 'os.PathLike[str]']  # forward ref as pylance complains unless editing with py3.9+
 

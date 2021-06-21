@@ -202,12 +202,11 @@ def read_cache(stream: IO[bytes]) -> Tuple[int, Dict[Tuple[PathLike, int], 'Inde
     * extension_data is '' or 4 bytes of type + 4 bytes of size + size bytes
     * content_sha is a 20 byte sha on all cache file contents"""
     version, num_entries = read_header(stream)
-    count = 0
     entries = {}  # type: Dict[Tuple[PathLike, int], 'IndexEntry']
 
     read = stream.read
     tell = stream.tell
-    while count < num_entries:
+    for _ in range(num_entries):
         beginoffset = tell()
         ctime = unpack(">8s", read(8))[0]
         mtime = unpack(">8s", read(8))[0]
@@ -221,7 +220,6 @@ def read_cache(stream: IO[bytes]) -> Tuple[int, Dict[Tuple[PathLike, int], 'Inde
         entry = IndexEntry((mode, sha, flags, path, ctime, mtime, dev, ino, uid, gid, size))
         # entry_key would be the method to use, but we safe the effort
         entries[(path, entry.stage)] = entry
-        count += 1
     # END for each entry
 
     # the footer contains extension data and a sha on the content so far
@@ -352,51 +350,31 @@ def aggressive_tree_merge(odb, tree_shas: Sequence[bytes]) -> List[BaseIndexEntr
                         # case, use theirs
                         out_append(_tree_entry_to_baseindexentry(theirs, 0))
                     # END handle modification
-                else:
-
-                    if ours[0] != base[0] or ours[1] != base[1]:
-                        # they deleted it, we changed it, conflict
-                        out_append(_tree_entry_to_baseindexentry(base, 1))
-                        out_append(_tree_entry_to_baseindexentry(ours, 2))
-                    # else:
-                    #   we didn't change it, ignore
-                    #   pass
-                    # END handle our change
-                # END handle theirs
-            else:
-                if theirs is None:
-                    # deleted in both, its fine - its out
-                    pass
-                else:
-                    if theirs[0] != base[0] or theirs[1] != base[1]:
-                        # deleted in ours, changed theirs, conflict
-                        out_append(_tree_entry_to_baseindexentry(base, 1))
-                        out_append(_tree_entry_to_baseindexentry(theirs, 3))
-                    # END theirs changed
-                    # else:
-                    #   theirs didn't change
-                    #   pass
-                # END handle theirs
-            # END handle ours
-        else:
-            # all three can't be None
-            if ours is None:
-                # added in their branch
-                out_append(_tree_entry_to_baseindexentry(theirs, 0))
-            elif theirs is None:
-                # added in our branch
-                out_append(_tree_entry_to_baseindexentry(ours, 0))
-            else:
-                # both have it, except for the base, see whether it changed
-                if ours[0] != theirs[0] or ours[1] != theirs[1]:
+                elif ours[0] != base[0] or ours[1] != base[1]:
+                    # they deleted it, we changed it, conflict
+                    out_append(_tree_entry_to_baseindexentry(base, 1))
                     out_append(_tree_entry_to_baseindexentry(ours, 2))
-                    out_append(_tree_entry_to_baseindexentry(theirs, 3))
-                else:
-                    # it was added the same in both
-                    out_append(_tree_entry_to_baseindexentry(ours, 0))
-                # END handle two items
-            # END handle heads
-        # END handle base exists
+                            # END handle theirs
+            elif theirs is not None and (
+                theirs[0] != base[0] or theirs[1] != base[1]
+            ):
+                # deleted in ours, changed theirs, conflict
+                out_append(_tree_entry_to_baseindexentry(base, 1))
+                out_append(_tree_entry_to_baseindexentry(theirs, 3))
+                    # END handle ours
+        elif ours is None:
+            # added in their branch
+            out_append(_tree_entry_to_baseindexentry(theirs, 0))
+        elif theirs is None:
+            # added in our branch
+            out_append(_tree_entry_to_baseindexentry(ours, 0))
+        elif ours[0] != theirs[0] or ours[1] != theirs[1]:
+            out_append(_tree_entry_to_baseindexentry(ours, 2))
+            out_append(_tree_entry_to_baseindexentry(theirs, 3))
+        else:
+            # it was added the same in both
+            out_append(_tree_entry_to_baseindexentry(ours, 0))
+            # END handle base exists
     # END for each entries tuple
 
     return out

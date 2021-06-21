@@ -184,11 +184,10 @@ class PushInfo(object):
         from_ref_string, to_ref_string = from_to.split(':')
         if flags & cls.DELETED:
             from_ref = None  # type: Union[SymbolicReference, None]
+        elif from_ref_string == "(delete)":
+            from_ref = None
         else:
-            if from_ref_string == "(delete)":
-                from_ref = None
-            else:
-                from_ref = Reference.from_path(remote.repo, from_ref_string)
+            from_ref = Reference.from_path(remote.repo, from_ref_string)
 
         # commit handling, could be message or commit info
         old_commit = None    # type: Optional[str]
@@ -400,10 +399,11 @@ class FetchInfo(object):
                 # always use actual type if we get absolute paths
                 # Will always be the case if something is fetched outside of refs/remotes (if its not a tag)
                 ref_path = remote_local_ref_str
-                if ref_type is not TagReference and not \
-                   remote_local_ref_str.startswith(RemoteReference._common_path_default + "/"):
+                if ref_type is not TagReference and not ref_path.startswith(
+                    RemoteReference._common_path_default + "/"
+                ):
                     ref_type = Reference
-                # END downgrade remote reference
+                        # END downgrade remote reference
             elif ref_type is TagReference and 'tags/' in remote_local_ref_str:
                 # even though its a tag, it is located in refs/remotes
                 ref_path = join_path(RemoteReference._common_path_default, remote_local_ref_str)
@@ -554,30 +554,28 @@ class Remote(LazyMixin, Iterable):
         try:
             # can replace cast with type assert?
             remote_details = cast(str, self.repo.git.remote("get-url", "--all", self.name))
-            for line in remote_details.split('\n'):
-                yield line
+            yield from remote_details.split('\n')
         except GitCommandError as ex:
             ## We are on git < 2.7 (i.e TravisCI as of Oct-2016),
             #  so `get-utl` command does not exist yet!
             #    see: https://github.com/gitpython-developers/GitPython/pull/528#issuecomment-252976319
             #    and: http://stackoverflow.com/a/32991784/548792
             #
-            if 'Unknown subcommand: get-url' in str(ex):
-                try:
-                    remote_details = cast(str, self.repo.git.remote("show", self.name))
-                    for line in remote_details.split('\n'):
-                        if '  Push  URL:' in line:
-                            yield line.split(': ')[-1]
-                except GitCommandError as _ex:
-                    if any(msg in str(_ex) for msg in ['correct access rights', 'cannot run ssh']):
-                        # If ssh is not setup to access this repository, see issue 694
-                        remote_details = cast(str, self.repo.git.config('--get-all', 'remote.%s.url' % self.name))
-                        for line in remote_details.split('\n'):
-                            yield line
-                    else:
-                        raise _ex
-            else:
+            if 'Unknown subcommand: get-url' not in str(ex):
                 raise ex
+
+            try:
+                remote_details = cast(str, self.repo.git.remote("show", self.name))
+                for line in remote_details.split('\n'):
+                    if '  Push  URL:' in line:
+                        yield line.split(': ')[-1]
+            except GitCommandError as _ex:
+                if any(msg in str(_ex) for msg in ['correct access rights', 'cannot run ssh']):
+                    # If ssh is not setup to access this repository, see issue 694
+                    remote_details = cast(str, self.repo.git.config('--get-all', 'remote.%s.url' % self.name))
+                    yield from remote_details.split('\n')
+                else:
+                    raise _ex
 
     @property
     def refs(self) -> IterableList:
@@ -607,10 +605,10 @@ class Remote(LazyMixin, Iterable):
             https://github.com/gitpython-developers/GitPython/issues/260
             """
         out_refs = IterableList(RemoteReference._id_attribute_, "%s/" % self.name)
+        # expecting
+        # * [would prune] origin/new_branch
+        token = " * [would prune] "
         for line in self.repo.git.remote("prune", "--dry-run", self).splitlines()[2:]:
-            # expecting
-            # * [would prune] origin/new_branch
-            token = " * [would prune] "
             if not line.startswith(token):
                 continue
             ref_name = line.replace(token, "")
@@ -620,7 +618,7 @@ class Remote(LazyMixin, Iterable):
             else:
                 fqhn = "%s/%s" % (RemoteReference._common_path_default, ref_name)
                 out_refs.append(RemoteReference(self.repo, fqhn))
-            # end special case handling
+                # end special case handling
         # END for each line
         return out_refs
 
@@ -818,11 +816,7 @@ class Remote(LazyMixin, Iterable):
             self._assert_refspec()
 
         kwargs = add_progress(kwargs, self.repo.git, progress)
-        if isinstance(refspec, list):
-            args = refspec  # type: Sequence[Optional[str]]  # should need this - check logic for passing None through
-        else:
-            args = [refspec]
-
+        args = refspec if isinstance(refspec, list) else [refspec]
         proc = self.repo.git.fetch(self, *args, as_process=True, with_stdout=False,
                                    universal_newlines=True, v=verbose, **kwargs)
         res = self._get_fetch_info_from_stderr(proc, progress)

@@ -116,11 +116,7 @@ class Diffable(object):
         :note:
             On a bare repository, 'other' needs to be provided as Index or as
             as Tree/Commit, or a git command error will occur"""
-        args = []  # type: List[Union[str, Diffable, object]]
-        args.append("--abbrev=40")        # we need full shas
-        args.append("--full-index")       # get full index paths, not only filenames
-
-        args.append("-M")                 # check for renames, in both formats
+        args = ["--abbrev=40", "--full-index", "-M"]
         if create_patch:
             args.append("-p")
         else:
@@ -325,11 +321,9 @@ class Diff(object):
         self.score = score
 
     def __eq__(self, other: object) -> bool:
-        for name in self.__slots__:
-            if getattr(self, name) != getattr(other, name):
-                return False
-        # END for each name
-        return True
+        return all(
+            getattr(self, name) == getattr(other, name) for name in self.__slots__
+        )
 
     def __ne__(self, other: object) -> bool:
         return not (self == other)
@@ -348,10 +342,7 @@ class Diff(object):
         line = None          # temp line
         line_length = 0      # line length
         for b, n in zip((self.a_blob, self.b_blob), ('lhs', 'rhs')):
-            if b:
-                line = "\n%s: %o | %s" % (n, b.mode, b.hexsha)
-            else:
-                line = "\n%s: None" % n
+            line = "\n%s: %o | %s" % (n, b.mode, b.hexsha) if b else "\n%s: None" % n
             # END if blob is not None
             line_length = max(len(line), line_length)
             msg += line
@@ -378,13 +369,8 @@ class Diff(object):
                 msg += 'OMITTED BINARY DATA'
             # end handle encoding
             msg += '\n---'
-        # END diff info
-
-        # Python2 silliness: have to assure we convert our likely to be unicode object to a string with the
-        # right encoding. Otherwise it tries to convert it using ascii, which may fail ungracefully
-        res = h + msg
         # end
-        return res
+        return h + msg
 
     @property
     def a_path(self) -> Optional[str]:
@@ -533,9 +519,6 @@ class Diff(object):
                 a_path = a_path_str.encode(defenc)
                 b_path = b_path_str.encode(defenc)
                 rename_from, rename_to = a_path, b_path
-            elif change_type == 'T':
-                # Nothing to do
-                pass
             # END add/remove handling
 
             diff = Diff(repo, a_path, b_path, a_blob_id, b_blob_id, old_mode, new_mode,

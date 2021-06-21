@@ -142,9 +142,8 @@ class Repo(object):
             warnings.warn("The use of environment variables in paths is deprecated" +
                           "\nfor security reasons and may be removed in the future!!")
         epath = expand_path(epath, expand_vars)
-        if epath is not None:
-            if not os.path.exists(epath):
-                raise NoSuchPathError(epath)
+        if epath is not None and not os.path.exists(epath):
+            raise NoSuchPathError(epath)
 
         ## Walk up the path to find the `.git` dir.
         #
@@ -623,15 +622,15 @@ class Repo(object):
         try:
             complete_sha = self.odb.partial_to_complete_sha_hex(sha)
             object_info = self.odb.info(complete_sha)
-            if object_type:
-                if object_info.type == object_type.encode():
-                    return True
-                else:
-                    log.debug("Commit hash points to an object of type '%s'. Requested were objects of type '%s'",
-                              object_info.type.decode(), object_type)
-                    return False
-            else:
+            if (
+                object_type
+                and object_info.type == object_type.encode()
+                or not object_type
+            ):
                 return True
+            log.debug("Commit hash points to an object of type '%s'. Requested were objects of type '%s'",
+                      object_info.type.decode(), object_type)
+            return False
         except BadObject:
             log.debug("Commit hash is invalid.")
             return False
@@ -680,12 +679,12 @@ class Repo(object):
             The method does not check for the existence of the paths in alts
             as the caller is responsible."""
         alternates_path = osp.join(self.common_dir, 'objects', 'info', 'alternates')
-        if not alts:
-            if osp.isfile(alternates_path):
-                os.remove(alternates_path)
-        else:
+        if alts:
             with open(alternates_path, 'wb') as f:
                 f.write("\n".join(alts).encode(defenc))
+
+        elif osp.isfile(alternates_path):
+            os.remove(alternates_path)
 
     alternates = property(_get_alternates, _set_alternates,
                           doc="Retrieve a list of alternates paths or set a list paths to be used as alternates")
@@ -708,20 +707,20 @@ class Repo(object):
             default_args.append('--ignore-submodules')
         if path:
             default_args.extend(["--", str(path)])
-        if index:
-            # diff index against HEAD
-            if osp.isfile(self.index.path) and \
-                    len(self.git.diff('--cached', *default_args)):
-                return True
+        if (
+            index
+            and osp.isfile(self.index.path)
+            and len(self.git.diff('--cached', *default_args))
+        ):
+            return True
         # END index handling
-        if working_tree:
-            # diff index against working tree
-            if len(self.git.diff(*default_args)):
-                return True
+        if working_tree and len(self.git.diff(*default_args)):
+            return True
         # END working tree handling
-        if untracked_files:
-            if len(self._get_untracked_files(path, ignore_submodules=not submodules)):
-                return True
+        if untracked_files and len(
+            self._get_untracked_files(path, ignore_submodules=not submodules)
+        ):
+            return True
         # END untracked files
         return False
 
@@ -929,46 +928,33 @@ class Repo(object):
                     elif role == firstpart:
                         info[role] = parts[-1]
                     # END distinguish mail,time,name
-                else:
-                    # handle
-                    # filename lib/grit.rb
-                    # summary add Blob
-                    # <and rest>
-                    if firstpart.startswith('filename'):
-                        info['filename'] = parts[-1]
-                    elif firstpart.startswith('summary'):
-                        info['summary'] = parts[-1]
-                    elif firstpart == '':
-                        if info:
-                            sha = info['id']
-                            c = commits.get(sha)
-                            if c is None:
-                                c = Commit(self, hex_to_bin(sha),
-                                           author=Actor._from_string(info['author'] + ' ' + info['author_email']),
-                                           authored_date=info['author_date'],
-                                           committer=Actor._from_string(
-                                               info['committer'] + ' ' + info['committer_email']),
-                                           committed_date=info['committer_date'])
-                                commits[sha] = c
+                elif firstpart.startswith('filename'):
+                    info['filename'] = parts[-1]
+                elif firstpart.startswith('summary'):
+                    info['summary'] = parts[-1]
+                elif firstpart == '':
+                    if info:
+                        sha = info['id']
+                        c = commits.get(sha)
+                        if c is None:
+                            c = Commit(self, hex_to_bin(sha),
+                                       author=Actor._from_string(info['author'] + ' ' + info['author_email']),
+                                       authored_date=info['author_date'],
+                                       committer=Actor._from_string(
+                                           info['committer'] + ' ' + info['committer_email']),
+                                       committed_date=info['committer_date'])
+                            commits[sha] = c
                             # END if commit objects needs initial creation
-                            if not is_binary:
-                                if line and line[0] == '\t':
-                                    line = line[1:]
-                            else:
-                                # NOTE: We are actually parsing lines out of binary data, which can lead to the
-                                # binary being split up along the newline separator. We will append this to the blame
-                                # we are currently looking at, even though it should be concatenated with the last line
-                                # we have seen.
-                                pass
-                            # end handle line contents
-                            blames[-1][0] = c
-                            if blames[-1][1] is not None:
-                                blames[-1][1].append(line)
-                            info = {'id': sha}
-                        # END if we collected commit info
-                    # END distinguish filename,summary,rest
-                # END distinguish author|committer vs filename,summary,rest
-            # END distinguish hexsha vs other information
+                        if not is_binary and line and line[0] == '\t':
+                            line = line[1:]
+                        # end handle line contents
+                        blames[-1][0] = c
+                        if blames[-1][1] is not None:
+                            blames[-1][1].append(line)
+                        info = {'id': sha}
+                                    # END if we collected commit info
+                        # END distinguish author|committer vs filename,summary,rest
+                # END distinguish hexsha vs other information
         return blames
 
     @classmethod

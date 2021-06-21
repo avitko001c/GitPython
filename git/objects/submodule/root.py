@@ -183,10 +183,6 @@ class RootModule(Submodule):
                     # HANDLE URL CHANGE
                     ###################
                     if sm.url != psm.url:
-                        # Add the new remote, remove the old one
-                        # This way, if the url just changes, the commits will not
-                        # have to be re-retrieved
-                        nn = '__new_origin__'
                         smm = sm.module()
                         rmts = smm.remotes
 
@@ -196,6 +192,10 @@ class RootModule(Submodule):
                                             "Changing url of submodule %r from %s to %s" % (sm.name, psm.url, sm.url))
 
                             if not dry_run:
+                                # Add the new remote, remove the old one
+                                # This way, if the url just changes, the commits will not
+                                # have to be re-retrieved
+                                nn = '__new_origin__'
                                 assert nn not in [r.name for r in rmts]
                                 smr = smm.create_remote(nn, sm.url)
                                 smr.fetch(progress=progress)
@@ -251,13 +251,8 @@ class RootModule(Submodule):
                                 # sha we point to is still contained in the new remote
                                 # tracking branch.
                                 smsha = sm.binsha
-                                found = False
                                 rref = smr.refs[self.branch_name]
-                                for c in rref.commit.traverse():
-                                    if c.binsha == smsha:
-                                        found = True
-                                        break
-                                    # END traverse all commits in search for sha
+                                found = any(c.binsha == smsha for c in rref.commit.traverse())
                                 # END for each commit
 
                                 if not found:
@@ -268,13 +263,13 @@ class RootModule(Submodule):
                                     log.warning("Current sha %s was not contained in the tracking\
              branch at the new remote, setting it the the remote's tracking branch", sm.hexsha)
                                     sm.binsha = rref.commit.binsha
-                                # END reset binsha
+                                                        # END reset binsha
 
-                                # NOTE: All checkout is performed by the base implementation of update
+                                                        # NOTE: All checkout is performed by the base implementation of update
                             # END handle dry_run
                             progress.update(
                                 END | URLCHANGE, i, len_csms, prefix + "Done adjusting url of submodule %r" % (sm.name))
-                        # END skip remote handling if new url already exists in module
+                                        # END skip remote handling if new url already exists in module
                     # END handle url
 
                     # HANDLE PATH CHANGES
@@ -310,9 +305,9 @@ class RootModule(Submodule):
 
                         progress.update(
                             END | BRANCHCHANGE, i, len_csms, prefix + "Done changing branch of submodule %r" % sm.name)
-                    # END handle branch
-                # END handle
-            # END for each common submodule
+                                # END handle branch
+                        # END handle
+                # END for each common submodule
         except Exception as err:
             if not keep_going:
                 raise
@@ -330,15 +325,12 @@ class RootModule(Submodule):
             # state will be better in case it fails somewhere. Defective branch
             # or defective depth. The RootSubmodule type will never process itself,
             # which was done in the previous expression
-            if recursive:
-                # the module would exist by now if we are not in dry_run mode
-                if sm.module_exists():
-                    type(self)(sm.module()).update(recursive=True, force_remove=force_remove,
-                                                   init=init, to_latest_revision=to_latest_revision,
-                                                   progress=progress, dry_run=dry_run, force_reset=force_reset,
-                                                   keep_going=keep_going)
-                # END handle dry_run
-            # END handle recursive
+            if recursive and sm.module_exists():
+                type(self)(sm.module()).update(recursive=True, force_remove=force_remove,
+                                               init=init, to_latest_revision=to_latest_revision,
+                                               progress=progress, dry_run=dry_run, force_reset=force_reset,
+                                               keep_going=keep_going)
+                # END handle recursive
         # END for each submodule to update
 
         return self

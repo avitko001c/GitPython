@@ -241,11 +241,7 @@ def _cygexpath(drive: Optional[str], path: PathLike) -> str:
     else:
         p = path and osp.normpath(osp.expandvars(osp.expanduser(path)))
         if osp.isabs(p):
-            if drive:
-                # Confusing, maybe a remote system should expand vars.
-                p = path
-            else:
-                p = cygpath(p)
+            p = path if drive else cygpath(p)
         elif drive:
             p = '/cygdrive/%s/%s' % (drive.lower(), p)
     p_str = str(p)  # ensure it is a str and not AnyPath
@@ -464,10 +460,7 @@ class RemoteProgress(object):
         # Compressing objects:  50% (1/2)
         # Compressing objects: 100% (2/2)
         # Compressing objects: 100% (2/2), done.
-        if isinstance(line, bytes):   # mypy argues about ternary assignment
-            line_str = line.decode('utf-8')
-        else:
-            line_str = line
+        line_str = line.decode('utf-8') if isinstance(line, bytes) else line
         self._cur_line = line_str
 
         if self._cur_line.startswith(('error:', 'fatal:')):
@@ -641,7 +634,7 @@ class Actor(object):
         return hash((self.name, self.email))
 
     def __str__(self) -> str:
-        return self.name if self.name else ""
+        return self.name or ""
 
     def __repr__(self) -> str:
         return '<git.Actor "%s <%s>">' % (self.name, self.email)
